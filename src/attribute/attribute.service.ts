@@ -2,11 +2,13 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { Attribute } from './schemas/attribute.schema';
+import { Category } from 'src/category/schemas/category.schema';
 
 @Injectable()
 export class AttributeService {
   constructor(
     @InjectModel(Attribute.name) private attributeModel: Model<Attribute>,
+    @InjectModel(Category.name) private categoryModel: Model<Category>,
   ) {}
 
   async create(data: any): Promise<Attribute> {
@@ -33,7 +35,13 @@ export class AttributeService {
   }
 
   async remove(id: string): Promise<void> {
-    const result = await this.attributeModel.findByIdAndDelete(id);
-    if (!result) throw new NotFoundException('Attribute not found');
+    const deleted = await this.attributeModel.findByIdAndDelete(id);
+    if (!deleted) throw new NotFoundException('Attribute not found');
+
+    // Remove this attribute ID from all categories
+    await this.categoryModel.updateMany(
+      { attributes: id },
+      { $pull: { attributes: id } },
+    );
   }
 }

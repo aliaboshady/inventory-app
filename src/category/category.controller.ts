@@ -24,6 +24,21 @@ export class CategoryController {
     return this.categoryService.findAll();
   }
 
+  @Get('main')
+  async findMain(): Promise<Category[]> {
+    return this.categoryService.findMainCategories();
+  }
+
+  @Get('sub')
+  async findSub(): Promise<Category[]> {
+    return this.categoryService.findSubCategories();
+  }
+
+  @Get('sub/:id')
+  async findSubByParent(@Param('id') id: string): Promise<Category[]> {
+    return this.categoryService.findSubCategoriesByParentId(id);
+  }
+
   @Get(':id')
   async findOne(@Param('id') id: string): Promise<Category> {
     return this.categoryService.findOne(id);
