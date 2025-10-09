@@ -29,7 +29,15 @@ export class CategoryService {
 
   async create(data: any): Promise<Category> {
     const created = new this.categoryModel(data);
-    return created.save();
+    const saved = await created.save();
+
+    if (saved.parent) {
+      await this.categoryModel.findByIdAndUpdate(saved.parent, {
+        $inc: { subCategoryCount: 1 },
+      });
+    }
+
+    return saved;
   }
 
   async findAll(): Promise<Category[]> {
@@ -88,6 +96,12 @@ export class CategoryService {
   async remove(id: string): Promise<void> {
     const deleted = await this.categoryModel.findByIdAndDelete(id);
     if (!deleted) throw new NotFoundException('Category not found');
+
+    if (deleted.parent) {
+      await this.categoryModel.findByIdAndUpdate(deleted.parent, {
+        $inc: { subCategoryCount: -1 },
+      });
+    }
 
     const otherCategory = await this.ensureOtherCategoryExists();
 

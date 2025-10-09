@@ -12,10 +12,16 @@ export class ItemService {
   ) {}
 
   async create(data: any): Promise<Item> {
-    const category = await this.categoryModel.findById(data.type);
-    if (!category) throw new NotFoundException('Category not found');
     const created = new this.itemModel(data);
-    return created.save();
+    const saved = await created.save();
+
+    if (saved.type) {
+      await this.categoryModel.findByIdAndUpdate(saved.type, {
+        $inc: { itemCount: 1 },
+      });
+    }
+
+    return saved;
   }
 
   async findAll(): Promise<Item[]> {
@@ -44,6 +50,12 @@ export class ItemService {
   async remove(id: string): Promise<void> {
     const deleted = await this.itemModel.findByIdAndDelete(id);
     if (!deleted) throw new NotFoundException('Item not found');
+
+    if (deleted.type) {
+      await this.categoryModel.findByIdAndUpdate(deleted.type, {
+        $inc: { itemCount: -1 },
+      });
+    }
   }
 
   // 🧠 Filter items dynamically by any query parameters

@@ -18,6 +18,12 @@ export class Category extends Document {
   // ✅ Flag to mark the "Other" category
   @Prop({ type: Boolean, default: false })
   isOther: boolean;
+
+  @Prop({ default: 0 })
+  subCategoryCount: number;
+
+  @Prop({ default: 0 })
+  itemCount: number;
 }
 
 export const CategorySchema = SchemaFactory.createForClass(Category);
