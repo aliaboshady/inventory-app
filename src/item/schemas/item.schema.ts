@@ -5,9 +5,6 @@ import { Attribute } from 'src/attribute/schemas/attribute.schema';
 
 @Schema({ timestamps: true })
 export class Item extends Document {
-  @Prop({ required: true })
-  name: string;
-
   // ✅ Reference to the category
   @Prop({ type: Types.ObjectId, ref: 'Category', required: true })
   type: Category;
