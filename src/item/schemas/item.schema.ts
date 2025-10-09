@@ -1,29 +1,34 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { Document } from 'mongoose';
-import { Category, CategorySchema } from 'src/category/schemas/category.schema';
+import { Document, Types } from 'mongoose';
+import { Category } from 'src/category/schemas/category.schema';
+import { Attribute } from 'src/attribute/schemas/attribute.schema';
 
 @Schema({ timestamps: true })
 export class Item extends Document {
   @Prop({ required: true })
   name: string;
 
-  // type = category object
-  @Prop({ type: CategorySchema, required: true })
+  // ✅ Reference to the category
+  @Prop({ type: Types.ObjectId, ref: 'Category', required: true })
   type: Category;
 
-  // attributes with chosen value
+  // ✅ Attributes (reference + optional value)
   @Prop({
     type: [
       {
-        name: { type: String, required: true },
-        value: { type: String, required: true },
+        attribute: { type: Types.ObjectId, ref: 'Attribute', required: true },
+        value: { type: String, required: false },
       },
     ],
     default: [],
   })
-  attributes: { name: string; value: string }[];
+  attributes: { attribute: Attribute; value?: string }[];
 
-  @Prop({ enum: ['IN_WAREHOUSE', 'OUT_OF_WAREHOUSE'], default: 'IN_WAREHOUSE' })
+  // ✅ Item status
+  @Prop({
+    enum: ['IN_WAREHOUSE', 'OUT_OF_WAREHOUSE', 'UNKNOWN'],
+    default: 'IN_WAREHOUSE',
+  })
   status: string;
 }
 
