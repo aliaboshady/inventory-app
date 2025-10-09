@@ -15,15 +15,9 @@ export class Category extends Document {
   @Prop({ type: [{ type: Types.ObjectId, ref: 'Attribute' }], default: [] })
   attributes: Attribute[];
 
-  // ✅ Flag to mark the "Other" category
-  @Prop({ type: Boolean, default: false })
-  isOther: boolean;
-
-  @Prop({ default: 0 })
-  subCategoryCount: number;
-
-  @Prop({ default: 0 })
-  itemCount: number;
+  // ✅ Flag to mark the sub category
+  @Prop({ type: Boolean, default: false, immutable: true })
+  isSubCategory: boolean;
 }
 
 export const CategorySchema = SchemaFactory.createForClass(Category);
