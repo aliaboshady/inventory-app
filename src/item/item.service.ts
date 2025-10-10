@@ -59,6 +59,7 @@ export class ItemService {
   async findWithFilters(query: {
     category?: string;
     subCategory?: string;
+    status?: string;
     page?: string;
     itemsPerPage?: string;
   }): Promise<IPaginated> {
@@ -66,7 +67,7 @@ export class ItemService {
     const limit = parseInt(query.itemsPerPage || '10', 10);
     let filter: Record<string, any> = {};
 
-    // ✅ If subCategory query is provided, use it and ignore category
+    // ✅ subCategory has priority
     if (query.subCategory) {
       if (!Types.ObjectId.isValid(query.subCategory)) {
         return {
@@ -93,7 +94,6 @@ export class ItemService {
 
       filter.type = subCat._id;
     } else if (query.category) {
-      // ✅ category query: get all items whose type's parent matches the category
       if (!Types.ObjectId.isValid(query.category)) {
         return {
           data: [],
@@ -115,12 +115,10 @@ export class ItemService {
         };
       }
 
-      // Get all subcategories of this category
       const subCategories = await this.categoryModel
         .find({ parent: mainCat._id })
         .select('_id')
         .exec();
-
       if (!subCategories.length) {
         return {
           data: [],
@@ -132,6 +130,11 @@ export class ItemService {
       }
 
       filter.type = { $in: subCategories.map((c) => c._id) };
+    }
+
+    // ✅ Apply status filter if provided
+    if (query.status) {
+      filter.status = query.status;
     }
 
     const [items, totalItems] = await Promise.all([

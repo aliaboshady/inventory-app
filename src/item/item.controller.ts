@@ -2,11 +2,11 @@ import {
   Controller,
   Get,
   Post,
-  Put,
   Delete,
   Param,
   Body,
   Query,
+  Patch,
 } from '@nestjs/common';
 import { ItemService } from './item.service';
 import { Item } from './schemas/item.schema';
@@ -25,12 +25,14 @@ export class ItemController {
   findAll(
     @Query('category') category?: string,
     @Query('subCategory') subCategory?: string,
+    @Query('status') status?: string,
     @Query('page') page?: string,
     @Query('itemsPerPage') itemsPerPage?: string,
   ): Promise<IPaginated> {
     return this.itemService.findWithFilters({
       category,
       subCategory,
+      status,
       page,
       itemsPerPage,
     });
@@ -41,7 +43,7 @@ export class ItemController {
     return this.itemService.findOne(id);
   }
 
-  @Put(':id')
+  @Patch(':id')
   update(@Param('id') id: string, @Body() data: any): Promise<Item> {
     return this.itemService.update(id, data);
   }
