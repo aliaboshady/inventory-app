@@ -1,9 +1,14 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { Model, Types } from 'mongoose';
 import { Attribute } from './schemas/attribute.schema';
 import { Category } from 'src/category/schemas/category.schema';
 import { Item } from 'src/item/schemas/item.schema';
+import { IPaginated } from 'src/types/shared.model';
 
 @Injectable()
 export class AttributeService {
@@ -18,8 +23,56 @@ export class AttributeService {
     return created.save();
   }
 
-  async findAll(): Promise<Attribute[]> {
-    return this.attributeModel.find().exec();
+  // 🧩 Fetch all attributes or by category (paginated)
+  async findAll(
+    categoryId?: string,
+    page = 1,
+    itemsPerPage = 10,
+  ): Promise<IPaginated> {
+    let filter: any = {};
+
+    if (categoryId) {
+      // Check if categoryId is valid
+      if (!Types.ObjectId.isValid(categoryId)) {
+        return {
+          data: [],
+          itemsPerPage: 0,
+          totalItems: 0,
+          currentPage: page,
+          totalPages: 0,
+        };
+      }
+
+      const category = await this.categoryModel.findById(categoryId).exec();
+      if (!category || !category.attributes.length) {
+        return {
+          data: [],
+          itemsPerPage: 0,
+          totalItems: 0,
+          currentPage: page,
+          totalPages: 0,
+        };
+      }
+
+      filter._id = { $in: category.attributes };
+    }
+
+    const [attributes, totalItems] = await Promise.all([
+      this.attributeModel
+        .find(filter)
+        .skip((page - 1) * itemsPerPage)
+        .limit(itemsPerPage)
+        .exec(),
+      this.attributeModel.countDocuments(filter),
+    ]);
+
+    return {
+      data: attributes,
+      itemsPerPage: attributes.length,
+      totalItems,
+      currentPage: page,
+      totalPages: Math.ceil(totalItems / itemsPerPage),
+    };
   }
 
   async findOne(id: string): Promise<Attribute> {

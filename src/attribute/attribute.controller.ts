@@ -6,9 +6,11 @@ import {
   Param,
   Patch,
   Delete,
+  Query,
 } from '@nestjs/common';
 import { AttributeService } from './attribute.service';
 import { Attribute } from './schemas/attribute.schema';
+import { IPaginated } from 'src/types/shared.model';
 
 @Controller('attributes')
 export class AttributeController {
@@ -19,9 +21,16 @@ export class AttributeController {
     return this.attributeService.create(data);
   }
 
+  // 🧩 Supports optional category filter + pagination
   @Get()
-  async findAll(): Promise<Attribute[]> {
-    return this.attributeService.findAll();
+  async findAll(
+    @Query('category') categoryId?: string,
+    @Query('page') page?: string,
+    @Query('itemsPerPage') itemsPerPage?: string,
+  ): Promise<IPaginated> {
+    const p = parseInt(page || '1', 10);
+    const limit = parseInt(itemsPerPage || '10', 10);
+    return this.attributeService.findAll(categoryId, p, limit);
   }
 
   @Get(':id')
