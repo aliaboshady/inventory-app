@@ -1,8 +1,9 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { Model, Types } from 'mongoose';
 import { Item } from './schemas/item.schema';
 import { Category } from 'src/category/schemas/category.schema';
+import { IPaginated } from 'src/types/shared.model';
 
 @Injectable()
 export class ItemService {
@@ -22,10 +23,6 @@ export class ItemService {
     }
 
     return saved;
-  }
-
-  async findAll(): Promise<Item[]> {
-    return this.itemModel.find().populate('type').exec();
   }
 
   async findOne(id: string): Promise<Item> {
@@ -58,24 +55,101 @@ export class ItemService {
     }
   }
 
-  // 🧠 Filter items dynamically by any query parameters
-  async findWithFilters(query: Record<string, string>): Promise<Item[]> {
-    const filter: Record<string, any> = {};
+  // 🧩 Fetch items with optional category/subCategory filters and pagination
+  async findWithFilters(query: {
+    category?: string;
+    subCategory?: string;
+    page?: string;
+    itemsPerPage?: string;
+  }): Promise<IPaginated> {
+    const page = parseInt(query.page || '1', 10);
+    const limit = parseInt(query.itemsPerPage || '10', 10);
+    let filter: Record<string, any> = {};
 
-    // If there's a "type" param, make sure it's a valid category ID
-    if (query.type) {
-      const category = await this.categoryModel.findById(query.type);
-      if (!category) throw new NotFoundException('Category not found');
-      filter.type = query.type;
-    }
-
-    // Add all other query params as direct filters (e.g. color=Red)
-    for (const [key, value] of Object.entries(query)) {
-      if (key !== 'type') {
-        filter[key] = value;
+    // ✅ If subCategory query is provided, use it and ignore category
+    if (query.subCategory) {
+      if (!Types.ObjectId.isValid(query.subCategory)) {
+        return {
+          data: [],
+          itemsPerPage: 0,
+          totalItems: 0,
+          currentPage: page,
+          totalPages: 0,
+        };
       }
+
+      const subCat = await this.categoryModel
+        .findById(query.subCategory)
+        .exec();
+      if (!subCat) {
+        return {
+          data: [],
+          itemsPerPage: 0,
+          totalItems: 0,
+          currentPage: page,
+          totalPages: 0,
+        };
+      }
+
+      filter.type = subCat._id;
+    } else if (query.category) {
+      // ✅ category query: get all items whose type's parent matches the category
+      if (!Types.ObjectId.isValid(query.category)) {
+        return {
+          data: [],
+          itemsPerPage: 0,
+          totalItems: 0,
+          currentPage: page,
+          totalPages: 0,
+        };
+      }
+
+      const mainCat = await this.categoryModel.findById(query.category).exec();
+      if (!mainCat) {
+        return {
+          data: [],
+          itemsPerPage: 0,
+          totalItems: 0,
+          currentPage: page,
+          totalPages: 0,
+        };
+      }
+
+      // Get all subcategories of this category
+      const subCategories = await this.categoryModel
+        .find({ parent: mainCat._id })
+        .select('_id')
+        .exec();
+
+      if (!subCategories.length) {
+        return {
+          data: [],
+          itemsPerPage: 0,
+          totalItems: 0,
+          currentPage: page,
+          totalPages: 0,
+        };
+      }
+
+      filter.type = { $in: subCategories.map((c) => c._id) };
     }
 
-    return this.itemModel.find(filter).populate('type').exec();
+    const [items, totalItems] = await Promise.all([
+      this.itemModel
+        .find(filter)
+        .populate('type')
+        .skip((page - 1) * limit)
+        .limit(limit)
+        .exec(),
+      this.itemModel.countDocuments(filter),
+    ]);
+
+    return {
+      data: items,
+      itemsPerPage: items.length,
+      totalItems,
+      currentPage: page,
+      totalPages: Math.ceil(totalItems / limit),
+    };
   }
 }

@@ -10,6 +10,7 @@ import {
 } from '@nestjs/common';
 import { ItemService } from './item.service';
 import { Item } from './schemas/item.schema';
+import { IPaginated } from 'src/types/shared.model';
 
 @Controller('items')
 export class ItemController {
@@ -21,8 +22,18 @@ export class ItemController {
   }
 
   @Get()
-  findAll(@Query() query: Record<string, string>): Promise<Item[]> {
-    return this.itemService.findWithFilters(query);
+  findAll(
+    @Query('category') category?: string,
+    @Query('subCategory') subCategory?: string,
+    @Query('page') page?: string,
+    @Query('itemsPerPage') itemsPerPage?: string,
+  ): Promise<IPaginated> {
+    return this.itemService.findWithFilters({
+      category,
+      subCategory,
+      page,
+      itemsPerPage,
+    });
   }
 
   @Get(':id')
