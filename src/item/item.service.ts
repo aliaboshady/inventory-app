@@ -44,6 +44,31 @@ export class ItemService {
     return updated;
   }
 
+  async updateAttribute(
+    itemId: string,
+    attributeId: string,
+    newValue: string,
+  ): Promise<Item> {
+    const item = await this.itemModel.findById(itemId);
+    if (!item) throw new NotFoundException('Item not found');
+
+    const attr = item.attributes.find(
+      (a) => a.attribute.toString() === attributeId,
+    );
+    if (!attr) throw new NotFoundException('Attribute not found in this item');
+
+    attr.value = newValue;
+    await item.save();
+
+    const updatedItem = await this.itemModel
+      .findById(itemId)
+      .populate('type')
+      .exec();
+    if (!updatedItem) throw new NotFoundException('Updated item not found');
+
+    return updatedItem;
+  }
+
   async remove(id: string): Promise<void> {
     const deleted = await this.itemModel.findByIdAndDelete(id);
     if (!deleted) throw new NotFoundException('Item not found');

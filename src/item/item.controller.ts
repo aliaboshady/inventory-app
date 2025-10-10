@@ -48,6 +48,14 @@ export class ItemController {
     return this.itemService.update(id, data);
   }
 
+  @Patch(':id/attribute')
+  updateAttribute(
+    @Param('id') id: string,
+    @Body() body: { attributeId: string; value: string },
+  ): Promise<Item> {
+    return this.itemService.updateAttribute(id, body.attributeId, body.value);
+  }
+
   @Delete(':id')
   remove(@Param('id') id: string): Promise<void> {
     return this.itemService.remove(id);
