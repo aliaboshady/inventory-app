@@ -1,9 +1,14 @@
 import { Types } from 'mongoose';
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { Category } from './schemas/category.schema';
 import { Item } from 'src/item/schemas/item.schema';
+import { IPaginated } from 'src/types/shared.model';
 
 @Injectable()
 export class CategoryService {
@@ -12,7 +17,6 @@ export class CategoryService {
     @InjectModel(Item.name) private itemModel: Model<Item>,
   ) {}
 
-  // 🧠 Helper: return a category with both counts attached
   private async getCounts(category: Category): Promise<any> {
     const id = (category._id as Types.ObjectId).toString();
 
@@ -28,7 +32,6 @@ export class CategoryService {
     };
   }
 
-  // 🧱 Create
   async create(data: any): Promise<Category> {
     const created = new this.categoryModel({
       ...data,
@@ -37,50 +40,67 @@ export class CategoryService {
     return created.save();
   }
 
-  // 📋 Find all
-  async findAll(): Promise<any[]> {
-    const categories = await this.categoryModel
-      .find()
-      .populate('parent')
-      .populate('attributes')
-      .exec();
+  // 🧩 Unified find
+  async findCategories(
+    isSub?: boolean,
+    parentId?: string,
+    page = 1,
+    itemsPerPage = 10,
+  ): Promise<IPaginated> {
+    let filter: any = {};
 
-    return Promise.all(categories.map((cat) => this.getCounts(cat)));
+    if (isSub === true) filter.parent = { $ne: null };
+    if (isSub === false) filter.parent = null;
+
+    // Only use parentId if it's valid
+    if (parentId) {
+      if (!Types.ObjectId.isValid(parentId)) {
+        // return empty paginated response
+        return {
+          data: [],
+          itemsPerPage: 0,
+          totalItems: 0,
+          currentPage: page,
+          totalPages: 0,
+        };
+      }
+      filter.parent = new Types.ObjectId(parentId);
+    }
+
+    const [categories, totalItems] = await Promise.all([
+      this.categoryModel
+        .find(filter)
+        .populate('parent')
+        .populate('attributes')
+        .skip((page - 1) * itemsPerPage)
+        .limit(itemsPerPage)
+        .exec(),
+      this.categoryModel.countDocuments(filter),
+    ]);
+
+    if (!categories.length) {
+      return {
+        data: [],
+        itemsPerPage: 0,
+        totalItems: 0,
+        currentPage: page,
+        totalPages: 0,
+      };
+    }
+
+    const data = await Promise.all(
+      categories.map((cat) => this.getCounts(cat)),
+    );
+
+    return {
+      data,
+      itemsPerPage: data.length,
+      totalItems,
+      currentPage: page,
+      totalPages: Math.ceil(totalItems / itemsPerPage),
+    };
   }
 
-  // 🏷️ Find main categories (no parent)
-  async findMainCategories(): Promise<any[]> {
-    const categories = await this.categoryModel
-      .find({ parent: null })
-      .populate('attributes')
-      .exec();
-
-    return Promise.all(categories.map((cat) => this.getCounts(cat)));
-  }
-
-  // 🔹 Find all subcategories (those with a parent)
-  async findSubCategories(): Promise<any[]> {
-    const categories = await this.categoryModel
-      .find({ parent: { $ne: null } })
-      .populate('parent')
-      .populate('attributes')
-      .exec();
-
-    return Promise.all(categories.map((cat) => this.getCounts(cat)));
-  }
-
-  // 📂 Find subcategories for a specific parent
-  async findSubCategoriesByParentId(parentId: string): Promise<any[]> {
-    const categories = await this.categoryModel
-      .find({ parent: parentId })
-      .populate('parent')
-      .populate('attributes')
-      .exec();
-
-    return Promise.all(categories.map((cat) => this.getCounts(cat)));
-  }
-
-  // 🔍 Find one
   async findOne(id: string): Promise<any> {
     const category = await this.categoryModel
       .findById(id)
@@ -89,11 +109,9 @@ export class CategoryService {
       .exec();
 
     if (!category) throw new NotFoundException('Category not found');
-
     return this.getCounts(category);
   }
 
-  // ✏️ Update
   async update(id: string, data: any): Promise<any> {
     if ('isSubCategory' in data) {
       delete data.isSubCategory;
@@ -109,18 +127,14 @@ export class CategoryService {
     return this.getCounts(updated);
   }
 
-  // 🗑️ Delete
   async remove(id: string): Promise<void> {
     const deleted = await this.categoryModel.findByIdAndDelete(id);
     if (!deleted) throw new NotFoundException('Category not found');
 
-    // Detach subcategories
     await this.categoryModel.updateMany(
       { parent: id },
       { $set: { parent: null } },
     );
-
-    // Remove type from items
     await this.itemModel.updateMany({ type: id }, { $set: { type: null } });
   }
 }
