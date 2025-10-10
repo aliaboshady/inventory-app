@@ -87,6 +87,7 @@ export class ItemService {
     status?: string;
     page?: string;
     itemsPerPage?: string;
+    attributes?: Record<string, string>; // Add attributes
   }): Promise<IPaginated> {
     const page = parseInt(query.page || '1', 10);
     const limit = parseInt(query.itemsPerPage || '10', 10);
@@ -103,11 +104,10 @@ export class ItemService {
           totalPages: 0,
         };
       }
-
       const subCat = await this.categoryModel
         .findById(query.subCategory)
         .exec();
-      if (!subCat) {
+      if (!subCat)
         return {
           data: [],
           itemsPerPage: 0,
@@ -115,8 +115,6 @@ export class ItemService {
           currentPage: page,
           totalPages: 0,
         };
-      }
-
       filter.type = subCat._id;
     } else if (query.category) {
       if (!Types.ObjectId.isValid(query.category)) {
@@ -128,9 +126,8 @@ export class ItemService {
           totalPages: 0,
         };
       }
-
       const mainCat = await this.categoryModel.findById(query.category).exec();
-      if (!mainCat) {
+      if (!mainCat)
         return {
           data: [],
           itemsPerPage: 0,
@@ -138,13 +135,12 @@ export class ItemService {
           currentPage: page,
           totalPages: 0,
         };
-      }
 
       const subCategories = await this.categoryModel
         .find({ parent: mainCat._id })
         .select('_id')
         .exec();
-      if (!subCategories.length) {
+      if (!subCategories.length)
         return {
           data: [],
           itemsPerPage: 0,
@@ -152,16 +148,51 @@ export class ItemService {
           currentPage: page,
           totalPages: 0,
         };
-      }
 
       filter.type = { $in: subCategories.map((c) => c._id) };
     }
 
-    // ✅ Apply status filter if provided
+    // ✅ Status filter
     if (query.status) {
       filter.status = query.status;
     }
 
+    // ✅ Attribute filters
+    if (query.attributes && Object.keys(query.attributes).length > 0) {
+      const attrNames = Object.keys(query.attributes);
+
+      // fetch the attribute documents from DB
+      const attrDocs = await this.itemModel.db
+        .collection('attributes')
+        .find({ name: { $in: attrNames } })
+        .toArray();
+
+      // if any attribute doesn't exist, return empty results immediately
+      if (attrDocs.length !== attrNames.length) {
+        return {
+          data: [],
+          itemsPerPage: 0,
+          totalItems: 0,
+          currentPage: parseInt(query.page || '1', 10),
+          totalPages: 0,
+        };
+      }
+
+      const attrFilters = attrDocs.map((attrDoc) => {
+        const value = query.attributes?.[attrDoc.name];
+        return {
+          attributes: {
+            $elemMatch: { attribute: new Types.ObjectId(attrDoc._id), value },
+          },
+        };
+      });
+
+      if (attrFilters.length > 0) {
+        filter.$and = attrFilters;
+      }
+    }
+
+    // ✅ Pagination + populate
     const [items, totalItems] = await Promise.all([
       this.itemModel
         .find(filter)

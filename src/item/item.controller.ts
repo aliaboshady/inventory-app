@@ -28,13 +28,24 @@ export class ItemController {
     @Query('status') status?: string,
     @Query('page') page?: string,
     @Query('itemsPerPage') itemsPerPage?: string,
+    @Query() query?: any,
   ): Promise<IPaginated> {
+    const attributes: Record<string, string> = {};
+    for (const key of Object.keys(query)) {
+      const match = key.match(/^attribute\[(.+)\]$/);
+      if (match) {
+        const attrName = match[1];
+        attributes[attrName] = query[key];
+      }
+    }
+
     return this.itemService.findWithFilters({
       category,
       subCategory,
       status,
       page,
       itemsPerPage,
+      attributes,
     });
   }
 
