@@ -19,61 +19,40 @@ export class CategoryService {
 
   private async getCounts(category: Category): Promise<any> {
     const id = (category._id as Types.ObjectId).toString();
-
-    const [subCategoryCount, itemCount] = await Promise.all([
-      this.categoryModel.countDocuments({ parent: id }),
-      this.itemModel.countDocuments({ type: id }),
-    ]);
+    const itemCount = await this.itemModel.countDocuments({ category: id });
 
     return {
       ...category.toObject(),
-      subCategoryCount,
       itemCount,
     };
   }
 
   async create(data: any): Promise<Category> {
-    const created = new this.categoryModel({
-      ...data,
-      isSubCategory: !!data.parent,
-    });
+    const created = new this.categoryModel(data);
     return created.save();
   }
 
   // 🧩 Unified find
-  async findCategories(
-    isSub?: boolean,
-    parentId?: string,
-    page = 1,
-    itemsPerPage = 10,
-  ): Promise<IPaginated> {
+  async findCategories(query: {
+    page?: string;
+    itemsPerPage?: string;
+    name?: string;
+  }): Promise<IPaginated> {
+    const page = parseInt(query.page || '1', 10);
+    const limit = parseInt(query.itemsPerPage || '10', 10);
     let filter: any = {};
 
-    if (isSub === true) filter.parent = { $ne: null };
-    if (isSub === false) filter.parent = null;
-
-    // Only use parentId if it's valid
-    if (parentId) {
-      if (!Types.ObjectId.isValid(parentId)) {
-        // return empty paginated response
-        return {
-          data: [],
-          itemsPerPage: 0,
-          totalItems: 0,
-          currentPage: page,
-          totalPages: 0,
-        };
-      }
-      filter.parent = new Types.ObjectId(parentId);
+    // ✅ Name search (case-insensitive, partial match)
+    if (query.name) {
+      filter.name = { $regex: query.name, $options: 'i' };
     }
 
     const [categories, totalItems] = await Promise.all([
       this.categoryModel
         .find(filter)
-        .populate('parent')
         .populate('attributes')
-        .skip((page - 1) * itemsPerPage)
-        .limit(itemsPerPage)
+        .skip((page - 1) * limit)
+        .limit(limit)
         .exec(),
       this.categoryModel.countDocuments(filter),
     ]);
@@ -97,14 +76,13 @@ export class CategoryService {
       itemsPerPage: data.length,
       totalItems,
       currentPage: page,
-      totalPages: Math.ceil(totalItems / itemsPerPage),
+      totalPages: Math.ceil(totalItems / limit),
     };
   }
 
   async findOne(id: string): Promise<any> {
     const category = await this.categoryModel
       .findById(id)
-      .populate('parent')
       .populate('attributes')
       .exec();
 
@@ -113,13 +91,8 @@ export class CategoryService {
   }
 
   async update(id: string, data: any): Promise<any> {
-    if ('isSubCategory' in data) {
-      delete data.isSubCategory;
-    }
-
     const updated = await this.categoryModel
       .findByIdAndUpdate(id, data, { new: true })
-      .populate('parent')
       .populate('attributes');
 
     if (!updated) throw new NotFoundException('Category not found');
@@ -130,11 +103,9 @@ export class CategoryService {
   async remove(id: string): Promise<void> {
     const deleted = await this.categoryModel.findByIdAndDelete(id);
     if (!deleted) throw new NotFoundException('Category not found');
-
-    await this.categoryModel.updateMany(
-      { parent: id },
-      { $set: { parent: null } },
+    await this.itemModel.updateMany(
+      { category: id },
+      { $set: { category: null } },
     );
-    await this.itemModel.updateMany({ type: id }, { $set: { type: null } });
   }
 }

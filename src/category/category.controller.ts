@@ -22,26 +22,13 @@ export class CategoryController {
   }
 
   // 📋 Unified GET for all categories
-  // Supports:
-  // - /categories
-  // - /categories?subCategory=true
-  // - /categories?subCategory=false
-  // - /categories?subCategory=true&category=123
-  // - /categories?subCategory=false&category=123
   @Get()
   async findAll(
-    @Query('subCategory') subCategory?: string,
-    @Query('category') parentId?: string,
     @Query('page') page?: string,
     @Query('itemsPerPage') itemsPerPage?: string,
+    @Query('name') name?: string,
   ): Promise<IPaginated> {
-    const p = parseInt(page || '1', 10);
-    const limit = parseInt(itemsPerPage || '10', 10);
-
-    const isSub =
-      subCategory === undefined ? undefined : subCategory === 'true';
-
-    return this.categoryService.findCategories(isSub, parentId, p, limit);
+    return this.categoryService.findCategories({page, itemsPerPage, name});
   }
 
   // 🔍 Get one

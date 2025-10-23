@@ -7,17 +7,11 @@ export class Category extends Document {
   @Prop({ required: true })
   name: string;
 
-  // ✅ Parent category (null for top-level)
-  @Prop({ type: Types.ObjectId, ref: 'Category', default: null })
-  parent: Category | null;
+  @Prop({ type: String, required: false })
+  imageURL?: string;
 
-  // ✅ Attributes (only used by subcategories)
   @Prop({ type: [{ type: Types.ObjectId, ref: 'Attribute' }], default: [] })
   attributes: Attribute[];
-
-  // ✅ Flag to mark the sub category
-  @Prop({ type: Boolean, default: false, immutable: true })
-  isSubCategory: boolean;
 }
 
 export const CategorySchema = SchemaFactory.createForClass(Category);

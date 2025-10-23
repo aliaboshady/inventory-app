@@ -3,6 +3,7 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { Item } from './schemas/item.schema';
 import { Category } from 'src/category/schemas/category.schema';
+import { Attribute } from 'src/attribute/schemas/attribute.schema';
 import { IPaginated } from 'src/types/shared.model';
 
 @Injectable()
@@ -10,36 +11,29 @@ export class ItemService {
   constructor(
     @InjectModel(Item.name) private itemModel: Model<Item>,
     @InjectModel(Category.name) private categoryModel: Model<Category>,
+    @InjectModel(Attribute.name) private attributeModel: Model<Attribute>,
   ) {}
 
   async create(data: any): Promise<Item> {
     const created = new this.itemModel(data);
-    const saved = await created.save();
-
-    if (saved.type) {
-      await this.categoryModel.findByIdAndUpdate(saved.type, {
-        $inc: { itemCount: 1 },
-      });
-    }
-
-    return saved;
+    return created.save();
   }
 
   async findOne(id: string): Promise<Item> {
-    const item = await this.itemModel.findById(id).populate('type').exec();
+    const item = await this.itemModel.findById(id).populate('category').exec();
     if (!item) throw new NotFoundException('Item not found');
     return item;
   }
 
   async update(id: string, data: any): Promise<Item> {
-    if (data.type) {
-      const category = await this.categoryModel.findById(data.type);
+    if (data.category) {
+      const category = await this.categoryModel.findById(data.category);
       if (!category) throw new NotFoundException('Category not found');
     }
 
     const updated = await this.itemModel
       .findByIdAndUpdate(id, data, { new: true })
-      .populate('type');
+      .populate('category');
     if (!updated) throw new NotFoundException('Item not found');
     return updated;
   }
@@ -62,141 +56,123 @@ export class ItemService {
 
     const updatedItem = await this.itemModel
       .findById(itemId)
-      .populate('type')
+      .populate('category')
       .exec();
-    if (!updatedItem) throw new NotFoundException('Updated item not found');
 
+    if (!updatedItem) throw new NotFoundException('Updated item not found');
     return updatedItem;
   }
 
   async remove(id: string): Promise<void> {
     const deleted = await this.itemModel.findByIdAndDelete(id);
     if (!deleted) throw new NotFoundException('Item not found');
-
-    if (deleted.type) {
-      await this.categoryModel.findByIdAndUpdate(deleted.type, {
-        $inc: { itemCount: -1 },
-      });
-    }
   }
 
-  // 🧩 Fetch items with optional category/subCategory filters and pagination
+  // 🧩 Fetch items with optional filters + pagination
   async findWithFilters(query: {
     category?: string;
-    subCategory?: string;
     status?: string;
     page?: string;
     itemsPerPage?: string;
-    attributes?: Record<string, string>; // Add attributes
+    attributes?: Record<string, string>;
+    name?: string;
   }): Promise<IPaginated> {
     const page = parseInt(query.page || '1', 10);
     const limit = parseInt(query.itemsPerPage || '10', 10);
-    let filter: Record<string, any> = {};
+    const filter: Record<string, any> = {};
 
-    // ✅ subCategory has priority
-    if (query.subCategory) {
-      if (!Types.ObjectId.isValid(query.subCategory)) {
-        return {
-          data: [],
-          itemsPerPage: 0,
-          totalItems: 0,
-          currentPage: page,
-          totalPages: 0,
-        };
-      }
-      const subCat = await this.categoryModel
-        .findById(query.subCategory)
-        .exec();
-      if (!subCat)
-        return {
-          data: [],
-          itemsPerPage: 0,
-          totalItems: 0,
-          currentPage: page,
-          totalPages: 0,
-        };
-      filter.type = subCat._id;
-    } else if (query.category) {
-      if (!Types.ObjectId.isValid(query.category)) {
-        return {
-          data: [],
-          itemsPerPage: 0,
-          totalItems: 0,
-          currentPage: page,
-          totalPages: 0,
-        };
-      }
-      const mainCat = await this.categoryModel.findById(query.category).exec();
-      if (!mainCat)
-        return {
-          data: [],
-          itemsPerPage: 0,
-          totalItems: 0,
-          currentPage: page,
-          totalPages: 0,
-        };
-
-      const subCategories = await this.categoryModel
-        .find({ parent: mainCat._id })
-        .select('_id')
-        .exec();
-      if (!subCategories.length)
-        return {
-          data: [],
-          itemsPerPage: 0,
-          totalItems: 0,
-          currentPage: page,
-          totalPages: 0,
-        };
-
-      filter.type = { $in: subCategories.map((c) => c._id) };
-    }
-
-    // ✅ Status filter
+    // -------- Status ----------
     if (query.status) {
       filter.status = query.status;
     }
 
-    // ✅ Attribute filters
-    if (query.attributes && Object.keys(query.attributes).length > 0) {
-      const attrNames = Object.keys(query.attributes);
+    // -------- Name search ----------
+    if (query.name) {
+      filter.name = { $regex: query.name, $options: 'i' };
+    }
 
-      // fetch the attribute documents from DB
-      const attrDocs = await this.itemModel.db
-        .collection('attributes')
-        .find({ name: { $in: attrNames } })
-        .toArray();
+    // -------- Category (accept ID or name) ----------
+    if (query.category) {
+      let categoryId: Types.ObjectId | null = null;
 
-      // if any attribute doesn't exist, return empty results immediately
-      if (attrDocs.length !== attrNames.length) {
+      if (Types.ObjectId.isValid(query.category)) {
+        categoryId = new Types.ObjectId(query.category);
+      } else {
+        const categoryDoc = await this.categoryModel
+          .findOne({ name: { $regex: `^${query.category}$`, $options: 'i' } })
+          .lean()
+          .exec();
+        if (categoryDoc)
+          categoryId = new Types.ObjectId((categoryDoc as any)._id);
+      }
+
+      if (!categoryId) {
         return {
           data: [],
           itemsPerPage: 0,
           totalItems: 0,
-          currentPage: parseInt(query.page || '1', 10),
+          currentPage: page,
           totalPages: 0,
         };
       }
 
-      const attrFilters = attrDocs.map((attrDoc) => {
-        const value = query.attributes?.[attrDoc.name];
+      filter.category = categoryId;
+    }
+
+    // -------- Attributes (keys can be attribute name OR attribute id) ----------
+    if (query.attributes && Object.keys(query.attributes).length > 0) {
+      const attrKeys = Object.keys(query.attributes);
+
+      // Resolve each key to an attribute doc (by id or by name). use .lean() so we get plain objects.
+      const attrDocs = await Promise.all(
+        attrKeys.map(async (key) => {
+          if (Types.ObjectId.isValid(key)) {
+            return await this.attributeModel.findById(key).lean().exec();
+          }
+          return await this.attributeModel
+            .findOne({ name: { $regex: `^${key}$`, $options: 'i' } })
+            .lean()
+            .exec();
+        }),
+      );
+
+      // If any requested attribute doesn't exist -> return empty
+      if (attrDocs.some((d) => !d)) {
+        return {
+          data: [],
+          itemsPerPage: 0,
+          totalItems: 0,
+          currentPage: page,
+          totalPages: 0,
+        };
+      }
+
+      // Build $and clause where each attribute must match an elem in the item's attributes array
+      const attrFilters = (attrDocs as any[]).map((attrDoc) => {
+        const attrId = new Types.ObjectId(attrDoc._id);
+        // try value by attribute name first (case-sensitive match to what client passed),
+        // otherwise try by attribute id string
+        const value =
+          query.attributes?.[attrDoc.name] ??
+          query.attributes?.[attrDoc._id.toString()];
         return {
           attributes: {
-            $elemMatch: { attribute: new Types.ObjectId(attrDoc._id), value },
+            $elemMatch: {
+              attribute: attrId,
+              value,
+            },
           },
         };
       });
 
-      if (attrFilters.length > 0) {
-        filter.$and = attrFilters;
-      }
+      if (attrFilters.length > 0) filter.$and = attrFilters;
     }
 
-    // ✅ Pagination + populate
+    // -------- Query DB (pagination + populate) ----------
     const [items, totalItems] = await Promise.all([
       this.itemModel
         .find(filter)
-        .populate('type')
+        .populate('category')
         .skip((page - 1) * limit)
         .limit(limit)
         .exec(),

@@ -7,7 +7,7 @@ import { Attribute } from 'src/attribute/schemas/attribute.schema';
 export class Item extends Document {
   // ✅ Reference to the category
   @Prop({ type: Types.ObjectId, ref: 'Category', required: true })
-  type: Category;
+  category: Category;
 
   // ✅ Attributes (reference + optional value)
   @Prop({
@@ -27,6 +27,15 @@ export class Item extends Document {
     default: 'IN_WAREHOUSE',
   })
   status: string;
+
+  @Prop({ required: false })
+  name: string;
+
+  @Prop({ required: false })
+  comment: string;
+
+  @Prop({ type: String, required: false })
+  imageURL?: string;
 }
 
 export const ItemSchema = SchemaFactory.createForClass(Item);

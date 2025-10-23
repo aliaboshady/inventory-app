@@ -24,10 +24,10 @@ export class ItemController {
   @Get()
   findAll(
     @Query('category') category?: string,
-    @Query('subCategory') subCategory?: string,
     @Query('status') status?: string,
     @Query('page') page?: string,
     @Query('itemsPerPage') itemsPerPage?: string,
+    @Query('name') name?: string,
     @Query() query?: any,
   ): Promise<IPaginated> {
     const attributes: Record<string, string> = {};
@@ -41,11 +41,11 @@ export class ItemController {
 
     return this.itemService.findWithFilters({
       category,
-      subCategory,
       status,
       page,
       itemsPerPage,
       attributes,
+      name,
     });
   }
 
