@@ -7,6 +7,7 @@ import { CategoryModule } from './category/category.module';
 import { AttributeModule } from './attribute/attribute.module';
 import { ItemModule } from './item/item.module';
 import { UserModule } from './user/user.module';
+import { AuthModule } from './auth/auth.module';
 
 @Module({
   imports: [
@@ -21,6 +22,7 @@ import { UserModule } from './user/user.module';
     AttributeModule,
     ItemModule,
     UserModule,
+    AuthModule,
   ],
   controllers: [AppController],
   providers: [AppService],
